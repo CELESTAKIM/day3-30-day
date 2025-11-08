@@ -1,0 +1,4 @@
+Flask==2.3.3
+Flask-CORS==4.0.0
+earthengine-api==0.1.374
+numpy>=1.26.0
