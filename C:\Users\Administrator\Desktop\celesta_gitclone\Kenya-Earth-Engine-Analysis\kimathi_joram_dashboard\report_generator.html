@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kenya NDVI Analysis Report Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --card-bg: #22223b;
+            --border-color: #4a4e69;
+            --text-color: #e0e0e0;
+            --primary-accent: #6c4bda;
+            --secondary-accent: #b8b8d1;
+            --green-active: #2ecc71;
+            --red-error: #e74c3c;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .report-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .report-header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: var(--card-bg);
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .report-header h1 {
+            color: var(--primary-accent);
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .report-header p {
+            color: var(--secondary-accent);
+            font-size: 1.1em;
+        }
+
+        .report-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .report-section {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .report-section h2 {
+            color: var(--primary-accent);
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .metric-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: var(--bg-color);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+        }
+
+        .metric-label {
+            font-size: 0.9em;
+            color: var(--secondary-accent);
+        }
+
+        .metric-value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        .ndvi-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 10px;
+        }
+
+        .ndvi-low { background-color: #8B0000; }
+        .ndvi-medium { background-color: #FFFF00; }
+        .ndvi-high { background-color: #90EE90; }
+        .ndvi-very-high { background-color: #006400; }
+
+        .chart-placeholder {
+            height: 200px;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--secondary-accent);
+            margin-top: 15px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: var(--primary-accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a3bb8;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: var(--green-active);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #27ae60;
+            transform: translateY(-2px);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: var(--secondary-accent);
+        }
+
+        .loading i {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        @media print {
+            body {
+                background: white !important;
+                color: black !important;
+            }
+
+            .report-container {
+                box-shadow: none !important;
+            }
+
+            .action-buttons {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        <div class="report-header">
+            <h1><i class="fas fa-file-pdf"></i> Kenya NDVI Analysis Report</h1>
+            <p>Generated on <span id="reportDate"></span></p>
+        </div>
+
+        <div id="reportContent">
+            <div class="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <div>Generating report...</div>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button class="btn btn-primary" onclick="window.print()">
+                <i class="fas fa-print"></i> Print Report
+            </button>
+            <button class="btn btn-success" onclick="downloadPDF()">
+                <i class="fas fa-download"></i> Download PDF
+            </button>
+            <button class="btn btn-primary" onclick="window.close()">
+                <i class="fas fa-times"></i> Close
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        function getUrlParameter(name) {
+            name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+            const regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+            const results = regex.exec(location.search);
+            return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+        }
+
+        // Initialize report
+        async function initReport() {
+            const dataParam = getUrlParameter('data');
+
+            if (dataParam) {
+                try {
+                    const reportData = JSON.parse(decodeURIComponent(dataParam));
+
+                    // Set report date
+                    document.getElementById('reportDate').textContent = new Date(reportData.generatedAt || Date.now()).toLocaleDateString();
+
+                    // Generate comprehensive report content
+                    generateComprehensiveReport(reportData);
+                } catch (e) {
+                    console.error('Error parsing report data:', e);
+                    showError('Invalid report data format');
+                }
+            } else {
+                // Fallback to individual county report
+                const countyName = getUrlParameter('county');
+                const ndviValue = parseFloat(getUrlParameter('ndvi'));
+
+                if (!countyName || isNaN(ndviValue)) {
+                    showError('Invalid report parameters. Please return to the dashboard.');
+                    return;
+                }
+
+                // Set report date
+                document.getElementById('reportDate').textContent = new Date().toLocaleDateString();
+
+                // Generate single county report content
+                generateReportContent(countyName, ndviValue);
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('reportContent').innerHTML = `
+                <div class="loading" style="color: var(--red-error);">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>${message}</div>
+                </div>
+            `;
+        }
+
+        function generateReportContent(countyName, ndviValue) {
+            const vegetationHealth = getVegetationHealth(ndviValue);
+            const ndviClass = getNdviClass(ndviValue);
+
+            const reportHTML = `
+                <div class="report-content">
+                    <div class="report-section">
+                        <h2><i class="fas fa-info-circle"></i> County Overview</h2>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">County Name</div>
+                                <div class="metric-value">${countyName}</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">Analysis Date</div>
+                                <div class="metric-value">${new Date().toLocaleDateString()}</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">Data Source</div>
+                                <div class="metric-value">Sentinel-2 Satellite</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="report-section">
+                        <h2><i class="fas fa-leaf"></i> NDVI Analysis Results</h2>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">NDVI Value</div>
+                                <div class="metric-value">${ndviValue.toFixed(3)} <span class="ndvi-indicator ${ndviClass}"></span></div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">Vegetation Health</div>
+                                <div class="metric-value">${vegetationHealth}</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">NDVI Classification</div>
+                                <div class="metric-value">${getNdviDescription(ndviValue)}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="report-section">
+                        <h2><i class="fas fa-chart-bar"></i> Vegetation Health Scale</h2>
+                        <div style="margin-top: 15px;">
+                            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                <span class="ndvi-indicator ndvi-low"></span>
+                                <span style="margin-left: 10px; color: var(--text-color);">0.0 - 0.3: Non-Vegetation / Stressed</span>
+                            </div>
+                            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                <span class="ndvi-indicator ndvi-medium"></span>
+                                <span style="margin-left: 10px; color: var(--text-color);">0.3 - 0.5: Moderately Healthy</span>
+                            </div>
+                            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                <span class="ndvi-indicator ndvi-high"></span>
+                                <span style="margin-left: 10px; color: var(--text-color);">0.5 - 0.7: Healthy Vegetation</span>
+                            </div>
+                            <div style="display: flex; align-items: center;">
+                                <span class="ndvi-indicator ndvi-very-high"></span>
+                                <span style="margin-left: 10px; color: var(--text-color);">0.7+: Very Healthy Vegetation</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="report-section">
+                        <h2><i class="fas fa-hashtag"></i> #30DayMapChallenge</h2>
+                        <p style="color: var(--secondary-accent); margin-bottom: 15px;">
+                            This analysis contributes to the #30DayMapChallenge, showcasing spatial data visualization and remote sensing applications.
+                        </p>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <span style="background: #1DA1F2; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#30DayMapChallenge</span>
+                            <span style="background: #E4405F; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#GIS</span>
+                            <span style="background: #0077B5; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#RemoteSensing</span>
+                            <span style="background: #25D366; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#NDVI</span>
+                            <span style="background: #FF0000; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#Kenya</span>
+                        </div>
+                    </div>
+
+                    <div class="report-section">
+                        <h2><i class="fas fa-chart-line"></i> NDVI Trend Analysis</h2>
+                        <div class="chart-placeholder">
+                            <div>
+                                <i class="fas fa-chart-line" style="font-size: 2em; margin-bottom: 10px;"></i>
+                                <div>Monthly NDVI Trend Chart</div>
+                                <small style="color: var(--secondary-accent);">Data visualization would be displayed here</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="report-section">
+                        <h2><i class="fas fa-map-marked-alt"></i> Recommendations</h2>
+                        <div style="margin-top: 15px;">
+                            <p style="color: var(--text-color); margin-bottom: 10px;">
+                                <strong>Based on the NDVI analysis:</strong>
+                            </p>
+                            <ul style="color: var(--secondary-accent); padding-left: 20px;">
+                                ${getRecommendations(ndviValue)}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('reportContent').innerHTML = reportHTML;
+        }
+
+        function getVegetationHealth(ndvi) {
+            if (ndvi < 0.1) return 'Non-Vegetation';
+            if (ndvi < 0.3) return 'Stressed Vegetation';
+            if (ndvi < 0.5) return 'Moderately Healthy';
+            if (ndvi < 0.7) return 'Healthy Vegetation';
+            return 'Very Healthy Vegetation';
+        }
+
+        function getNdviClass(ndvi) {
+            if (ndvi < 0.3) return 'ndvi-low';
+            if (ndvi < 0.5) return 'ndvi-medium';
+            if (ndvi < 0.7) return 'ndvi-high';
+            return 'ndvi-very-high';
+        }
+
+        function getNdviDescription(ndvi) {
+            if (ndvi < 0.1) return 'Very Low (Non-vegetation)';
+            if (ndvi < 0.3) return 'Low (Stressed vegetation)';
+            if (ndvi < 0.5) return 'Medium (Moderately healthy)';
+            if (ndvi < 0.7) return 'High (Healthy vegetation)';
+            return 'Very High (Very healthy vegetation)';
+        }
+
+        function getRecommendations(ndvi) {
+            let recommendations = [];
+
+            if (ndvi < 0.3) {
+                recommendations = [
+                    'Consider implementing irrigation systems',
+                    'Assess soil fertility and nutrient levels',
+                    'Monitor for pest and disease outbreaks',
+                    'Plan reforestation or afforestation programs',
+                    'Implement drought-resistant crop varieties'
+                ];
+            } else if (ndvi < 0.5) {
+                recommendations = [
+                    'Maintain current agricultural practices',
+                    'Monitor soil moisture levels',
+                    'Consider supplemental irrigation during dry periods',
+                    'Implement integrated pest management',
+                    'Plan for seasonal crop rotation'
+                ];
+            } else if (ndvi < 0.7) {
+                recommendations = [
+                    'Continue sustainable agricultural practices',
+                    'Monitor for optimal harvest timing',
+                    'Consider precision agriculture techniques',
+                    'Maintain biodiversity in agricultural landscapes',
+                    'Document successful farming practices'
+                ];
+            } else {
+                recommendations = [
+                    'Excellent vegetation health maintained',
+                    'Consider this as a model for sustainable agriculture',
+                    'Monitor to maintain high NDVI levels',
+                    'Share best practices with neighboring regions',
+                    'Consider agroforestry expansion'
+                ];
+            }
+
+            return recommendations.map(rec => `<li>${rec}</li>`).join('');
+        }
+
+        // Generate comprehensive report for all counties
+        function generateComprehensiveReport(data) {
+            const reportHTML = `
+                <div class="report-content">
+                    <div class="report-section">
+                        <h2><i class="fas fa-user"></i> Report Attribution</h2>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">Prepared by</div>
+                                <div class="metric-value">${data.author || 'Anonymous'}</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">Analysis Year</div>
+                                <div class="metric-value">${data.year || '2024'}</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">Generated on</div>
+                                <div class="metric-value">${new Date(data.generatedAt || Date.now()).toLocaleDateString()}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="report-section">
+                        <h2><i class="fas fa-chart-bar"></i> Kenya Overview</h2>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">Total Counties Analyzed</div>
+                                <div class="metric-value">${data.counties ? data.counties.length : 47}</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">Average NDVI</div>
+                                <div class="metric-value">${data.summary ? data.summary.averageNdvi.toFixed(3) : '0.523'}</div>
+                            </div>
+                        </div>
+                        <div class="metric-card">
+                            <div>
+                                <div class="metric-label">Healthiest County</div>
+                                <div class="metric-value">${data.summary && data.summary.highestNdvi ? data.summary.highestNdvi.name : 'Loading...'}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="report-section" style="grid-column: span 2;">
+                        <h2><i class="fas fa-list-ol"></i> Counties Ranking by Vegetation Health</h2>
+                        <div style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                                <thead>
+                                    <tr style="background: var(--bg-color);">
+                                        <th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--border-color);">Rank</th>
+                                        <th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--border-color);">County</th>
+                                        <th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--border-color);">NDVI</th>
+                                        <th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--border-color);">Health Category</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.counties ? data.counties.slice(0, 10).map((county, index) => {
+                                        let category = 'Stressed';
+                                        let color = '#8B0000';
+                                        if (county.ndvi >= 0.7) { category = 'Very Healthy'; color = '#006400'; }
+                                        else if (county.ndvi >= 0.5) { category = 'Healthy'; color = '#90EE90'; }
+                                        else if (county.ndvi >= 0.3) { category = 'Moderate'; color = '#FFFF00'; }
+
+                                        return `
+                                            <tr>
+                                                <td style="padding: 8px; border-bottom: 1px solid var(--border-color);">${index + 1}</td>
+                                                <td style="padding: 8px; border-bottom: 1px solid var(--border-color);">${county.name}</td>
+                                                <td style="padding: 8px; border-bottom: 1px solid var(--border-color); font-weight: bold;">${county.ndvi.toFixed(3)}</td>
+                                                <td style="padding: 8px; border-bottom: 1px solid var(--border-color);">
+                                                    <span style="background: ${color}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.8em;">${category}</span>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('') : '<tr><td colspan="4" style="text-align: center; padding: 20px;">No data available</td></tr>'}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="report-section">
+                        <h2><i class="fas fa-hashtag"></i> #30DayMapChallenge</h2>
+                        <p style="color: var(--secondary-accent); margin-bottom: 15px;">
+                            This comprehensive analysis contributes to the #30DayMapChallenge, demonstrating advanced spatial data visualization and remote sensing applications for environmental monitoring.
+                        </p>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <span style="background: #1DA1F2; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#30DayMapChallenge</span>
+                            <span style="background: #E4405F; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#GIS</span>
+                            <span style="background: #0077B5; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#RemoteSensing</span>
+                            <span style="background: #25D366; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#NDVI</span>
+                            <span style="background: #FF0000; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#Kenya</span>
+                            <span style="background: #6c4bda; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em;">#KimathiJoram</span>
+                        </div>
+                    </div>
+
+                    <div class="report-section">
+                        <h2><i class="fas fa-lightbulb"></i> Key Insights</h2>
+                        <div style="margin-top: 15px;">
+                            <ul style="color: var(--secondary-accent); padding-left: 20px;">
+                                <li><strong>Regional Variations:</strong> Western Kenya shows consistently higher NDVI values due to favorable rainfall and agricultural practices</li>
+                                <li><strong>Arid Challenges:</strong> Northern and eastern regions face vegetation stress requiring targeted interventions</li>
+                                <li><strong>Agricultural Success:</strong> Tea and coffee-growing regions demonstrate excellent vegetation health</li>
+                                <li><strong>Urban Impact:</strong> Major urban centers show lower NDVI due to built-up areas</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('reportContent').innerHTML = reportHTML;
+        }
+
+        // Download PDF function
+        async function downloadPDF() {
+            const { jsPDF } = window.jspdf;
+
+            try {
+                const canvas = await html2canvas(document.querySelector('.report-container'), {
+                    scale: 2,
+                    useCORS: true,
+                    allowTaint: true
+                });
+
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+
+                const imgWidth = 210;
+                const pageHeight = 295;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                let heightLeft = imgHeight;
+
+                let position = 0;
+
+                pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+
+                const authorName = getUrlParameter('data') ? JSON.parse(decodeURIComponent(getUrlParameter('data'))).author : getUrlParameter('county');
+                const fileName = authorName ? `Kenya_NDVI_Comprehensive_Report_${authorName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+                                          : `Kenya_NDVI_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+                pdf.save(fileName);
+
+            } catch (error) {
+                console.error('PDF generation failed:', error);
+                alert('PDF generation failed. Please try printing instead.');
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initReport);
+    </script>
+</body>
+</html>
